@@ -5,6 +5,7 @@ from yoomoney import Client, Quickpay
 from datetime import datetime
 from random import choice
 from string import ascii_uppercase
+import sqlite3
 
 file = open("tmp_token_save.txt", "r")
 tok = file.read()
@@ -57,8 +58,24 @@ choose_markup = create_a_markup([
 
 @bot.message_handler(commands=['start'])
 def main_func(message):
-    # add to database
     bot.send_message(message.chat.id, main_text, reply_markup=menu_markup)
+
+    connection = sqlite3.connect('my_database.db')
+    cursor = connection.cursor()
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Users (
+    id INTEGER AUTO_INCREMENT PRIMARY KEY,
+    username TEXT NOT NULL,
+    keys TEXT[]
+    )
+    ''')
+
+    connection.commit()
+    connection.close()
+
+    #user = bot.get_me()
+    #bot.send_message(message.chat.id, user.id)
 
 
 
@@ -106,6 +123,9 @@ def func_buy_key(x_call, x_bot, duration, x_sum):
         x_bot.send_message(x_call.message.chat.id, f"Оплата произошла успешло!\nВаш ключ: {outline_key}")
     x_bot.send_message(x_call.message.chat.id, main_text, reply_markup=menu_markup)
 
+
+def func_get_all_key(x_call, x_bot):
+    return 0
 
 
 @bot.callback_query_handler(func=lambda call: True)
