@@ -60,22 +60,24 @@ choose_markup = create_a_markup([
 def main_func(message):
     bot.send_message(message.chat.id, main_text, reply_markup=menu_markup)
 
-    connection = sqlite3.connect('my_database.db')
+    connection = sqlite3.connect('vpn_database.db')
     cursor = connection.cursor()
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Users (
     id INTEGER AUTO_INCREMENT PRIMARY KEY,
-    username TEXT NOT NULL,
-    keys TEXT[]
+    username TEXT NOT NULL UNIQUE,
+    keys TEXT
     )
     ''')
 
+    try:
+        cursor.execute(f"INSERT INTO Users (username, keys) VALUES ({bot.get_me().id}, '');")
+    except Exception as e:
+        ...
+
     connection.commit()
     connection.close()
-
-    #user = bot.get_me()
-    #bot.send_message(message.chat.id, user.id)
 
 
 
