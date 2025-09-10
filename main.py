@@ -1,13 +1,14 @@
 import telebot
 from telebot import types
 from yoomoney import Client, Quickpay
-from datetime import datetime
+from datetime import datetime, date
 from random import choice
 from string import ascii_uppercase
 import sqlite3
 import json
 from dotenv import load_dotenv
 import os
+import time
 
 load_dotenv()
 
@@ -41,6 +42,7 @@ def create_a_markup(arr):
 
 
 main_text = "<b>Выберите действие</b>"
+help_text = "<b>По всем вопросам/проблемам:</b>\n@vsndrg <b>или</b> @mz4ls"
 
 menu_markup = create_a_markup([
     ("Купить ключ", "buy"),
@@ -62,8 +64,6 @@ for i in month_price_data["month"]:
 choose_markup = create_a_markup(ls_buttons_buy)
 
 
-
-
 @bot.message_handler(commands=['start'])
 def main_func(message):
     bot.send_message(message.chat.id, main_text, reply_markup=menu_markup, parse_mode='HTML')
@@ -80,7 +80,7 @@ def main_func(message):
     ''')
 
     try:
-        cursor.execute(f"INSERT INTO Users (username, keys) VALUES ({bot.get_me().id}, '[]');")
+        cursor.execute(f"INSERT INTO Users (username, keys) VALUES ({message.chat.id}, '[]');")
     except Exception as e:
         ...
 
@@ -89,7 +89,10 @@ def main_func(message):
 
 
 
-
+@bot.message_handler(commands=['help'])
+def help_func(message):
+    bot.send_message(chat_id=message.chat.id,
+                              text=help_text, parse_mode='HTML')
 
 
 
@@ -123,6 +126,8 @@ def func_buy_key(x_call, x_bot, duration, x_sum):
                           reply_markup=link_ret, parse_mode='HTML')
 
 
+def fnwls(num):
+    return "{:02d}".format(int(num))
 
 
 
@@ -133,7 +138,6 @@ def callback_inline(call):
                               text=main_text, reply_markup=choose_markup, parse_mode='HTML')
     
     if call.data == 'help':
-        help_text = "<b>По всем вопросам/проблемам:</b>\n@vsndrg <b>или</b> @mz4ls"
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text=help_text, reply_markup=all_keys_markup, parse_mode='HTML')
 
@@ -148,10 +152,15 @@ def callback_inline(call):
 
     if call.data == "all_keys":
 
-        us_id = bot.get_me().id
+        us_id = call.message.chat.id
 
         connection = sqlite3.connect('vpn_database.db')
         cursor = connection.cursor()
+
+        try:
+            cursor.execute(f"INSERT INTO Users (username, keys) VALUES ({call.message.chat.id}, '[]');")
+        except Exception as e:
+            ...
 
         cursor.execute(f'''
         SELECT keys FROM Users WHERE username="{us_id}";
@@ -169,12 +178,34 @@ def callback_inline(call):
                                   reply_markup=all_keys_markup, parse_mode='HTML')
         else:
             txt_to_send = ""
+            date_now_d = datetime.now()
+            date_now = date(date_now_d.year, date_now_d.month, date_now_d.day)
+            upd = []
             for m in range(len(res)):
-                txt_to_send += f"<em>({res[m][1][0]}.{res[m][1][1]}.{res[m][1][2]}, {res[m][2]} мес.):</em>\n<b>{res[m][0]}</b>\n\n"
+                date_cur = date(int(res[m][1][2]), int(res[m][1][1]), int(res[m][1][0]))
+                diff = date_now - date_cur
+                
 
-            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                if diff.days <= (int(res[m][2]) * 31):
+                    upd.append(res[m])
+                    txt_to_send += f"<em>({fnwls(res[m][1][0])}.{fnwls(res[m][1][1])}.{res[m][1][2]}, {res[m][2]} мес.):</em>\n<b>{res[m][0]}</b>\n\n"
+
+
+            if len(txt_to_send) <= 0:
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                  text="<b>У вас пока нет ключей</b>",
+                                  reply_markup=all_keys_markup, parse_mode='HTML')
+            else:
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                                   text=txt_to_send,
                                   reply_markup=all_keys_markup, parse_mode="HTML")
+            
+            if len(res) != len(upd):
+                connection = sqlite3.connect('vpn_database.db')
+                cursor = connection.cursor()
+                cursor.execute(f"UPDATE Users SET keys = '{json.dumps(upd)}' WHERE username = '{call.message.chat.id}'")
+                connection.commit()
+                connection.close()
 
     if call.data[0:7] == "payment":
         dt_label = call.data.split("|")[1]
@@ -191,15 +222,21 @@ def callback_inline(call):
         #TEMP: am == -1 is just for debug. In prod replace to am != -1
         if am == -1:
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
-                                  text=main_text,
-                                  reply_markup=menu_markup, parse_mode='HTML')
+                                  text="<b>Готово! Создание ключа может занять некоторое время\nПо всем вопросам:</b> /help",
+                                  parse_mode='HTML')
+            time.sleep(3)
 
             #start add key
 
-            us_id = bot.get_me().id
+            us_id = call.message.chat.id
 
             connection = sqlite3.connect('vpn_database.db')
             cursor = connection.cursor()
+
+            try:
+                cursor.execute(f"INSERT INTO Users (username, keys) VALUES ({call.message.chat.id}, '[]');")
+            except Exception as e:
+                ...
 
             cursor.execute(f'''
             SELECT keys FROM Users WHERE username="{us_id}";
@@ -220,7 +257,11 @@ def callback_inline(call):
             #end add key
 
 
-            bot.send_message(call.message.chat.id, f"<em>Оплата прошла успешно! Ваш ключ:</em>\n<b>{new_gen_key}</b>", parse_mode="HTML")
+            bot.send_message(call.message.chat.id, f"<em>Оплата прошла успешно! Ваш ключ:</em>", parse_mode="HTML")
+            bot.send_message(call.message.chat.id, f"<b>{new_gen_key}</b>", parse_mode="HTML")
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                  text=main_text,
+                                  reply_markup=menu_markup, parse_mode='HTML')
         else:
             bot.send_message(call.message.chat.id, f"<b>Оплата не прошла, попробуйте снова</b>", parse_mode='HTML')
 
